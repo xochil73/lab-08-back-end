@@ -4,6 +4,7 @@
 const express = require('express');
 const cors = require('cors');
 const superAgent = require('superagent');
+const pg = require('pg');
 let lat;
 let long;
 
@@ -12,12 +13,17 @@ require('dotenv').config();
 
 const PORT = process.env.PORT || 3000;
 
+//postgres
+const client = new pg.Client(process.env.DATABASE_URL);
+client.connect();
+client.on('error', err => console.error(err));
+
 //app
 const app = express();
 app.use(cors());
 app.get('/location', getLocation);
 
-// Get Location data
+
 function getLocation (request, response) {
   return searchToLatLong(request.query.data)
     .then(locationData => {
@@ -126,14 +132,14 @@ function searchWeather(query){
     .catch(err => console.error(err));
 }
 
-function Location(location, query){
-  this.query = query;
-  this.formatted_query = location.formatted_address;
-  this.latitude = location.geometry.location.lat;
-  this.longitude = location.geometry.location.lng;
-  lat = location.geometry.location.lat;
-  long = location.geometry.location.lng;
-}
+// function Location(location, query){
+//   this.query = query;
+//   this.formatted_query = location.formatted_address;
+//   this.latitude = location.geometry.location.lat;
+//   this.longitude = location.geometry.location.lng;
+//   lat = location.geometry.location.lat;
+//   long = location.geometry.location.lng;
+// }
 
 // Error messages
 app.get('/*', function(req, res) {
