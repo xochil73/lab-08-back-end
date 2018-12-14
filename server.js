@@ -5,8 +5,8 @@ const express = require('express');
 const cors = require('cors');
 const superAgent = require('superagent');
 const pg = require('pg');
-let lat;
-let long;
+// let lat;
+// let long;
 
 //Load env vars;
 require('dotenv').config();
@@ -25,11 +25,61 @@ app.get('/location', getLocation);
 
 
 function getLocation (request, response) {
-  return searchToLatLong(request.query.data)
-    .then(locationData => {
-      response.send(locationData);}
-    );
+  //check database for location info
+  let lookupHandler = { 
+  cacheHit : (data) => {
+  response.status(200).send(data.rows[0]);
+},
+
+  cacheMiss : (query) => {
+    return fetchLocation(query)
+    .then(result => {
+    response.send(result)
+    })
+  }
 }
+  lookupLocation(req.query.data, lookupHandler);
+}
+
+function lookupLocation(query, handler){
+  const SQL = 'SELECT * FROM locations WHERE search_query=$1';
+  const values = [query];
+  return client.query(SQL, values)
+    .then(data => { // then if we have it, send it back;
+      if (data.rowCount) {
+        handler.cacheHit(data);
+      } else {
+        handler.cacheMiss(query);
+      }
+    })
+}
+
+function fetchLocation(query){
+  // otherwise, get it from google
+
+    const URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`
+
+    return superagent.get(URL)
+      .then(result => {
+        console.log('Location retreived from google')
+        // then normalize it
+
+        let location = new Location(result.body.results[0]);
+        let SQL = `INSERT INTO locations 
+            (search_query, formatted_query, latitude, longitude)
+            VALUES($1, $2, $3, $4)`;
+
+        // store it in our db
+        return client.query(SQL, [query, location.formatted_query, location.latitude, location.longitude])
+          .then(() => {
+            return location;
+          })
+       })
+
+}
+
+
+
 
 // Get weather data
 app.get('/weather', (request, response) => {
@@ -132,14 +182,14 @@ function searchWeather(query){
     .catch(err => console.error(err));
 }
 
-// function Location(location, query){
-//   this.query = query;
-//   this.formatted_query = location.formatted_address;
-//   this.latitude = location.geometry.location.lat;
-//   this.longitude = location.geometry.location.lng;
-//   lat = location.geometry.location.lat;
-//   long = location.geometry.location.lng;
-// }
+function Location(location, query){
+  // this.query = query;
+  this.formatted_query = location.formatted_address;
+  this.latitude = location.geometry.location.lat;
+  this.longitude = location.geometry.location.lng;
+  // lat = location.geometry.location.lat;
+  // long = location.geometry.location.lng;
+}
 
 // Error messages
 app.get('/*', function(req, res) {
